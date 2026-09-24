@@ -1,0 +1,20 @@
+<svg class="rec-face" data-gender="woman" viewBox="0 0 160 170" xmlns="http://www.w3.org/2000/svg">
+  <path class="rec-hair-back" d="M32 70 Q28 140 40 168 L120 168 Q132 140 128 70 Q128 30 80 26 Q32 30 32 70 Z"/>
+  <path class="rec-blazer" d="M18 168 Q26 122 52 112 L108 112 Q134 122 142 168 Z"/>
+  <rect class="rec-collar" x="66" y="108" width="28" height="22" rx="3"/>
+  <ellipse class="rec-neck" cx="80" cy="108" rx="14" ry="16"/>
+  <ellipse class="rec-face-skin" cx="80" cy="72" rx="34" ry="38"/>
+  <path class="rec-hair-front" d="M46 62 Q44 30 80 28 Q116 30 114 62 Q108 42 80 42 Q52 42 46 62 Z"/>
+  <path class="rec-hair-side-l" d="M46 60 Q38 96 44 132 Q34 96 40 58 Z"/>
+  <path class="rec-hair-side-r" d="M114 60 Q122 96 116 132 Q126 96 120 58 Z"/>
+  <path class="rec-brow" d="M58 62 Q66 57 74 61" />
+  <path class="rec-brow" d="M86 61 Q94 57 102 62" />
+  <circle class="bot-eye rec-eye" cx="66" cy="70" r="3.6"/>
+  <circle class="bot-eye rec-eye" cx="94" cy="70" r="3.6"/>
+  <path class="rec-nose" d="M79 72 Q76 80 80 82 Q83 82 81 80"/>
+  <path class="rec-mouth" d="M67 94 Q80 99 93 94 Q80 97 67 94 Z"/>
+  <ellipse class="rec-blush" cx="60" cy="84" rx="6" ry="3.5"/>
+  <ellipse class="rec-blush" cx="100" cy="84" rx="6" ry="3.5"/>
+  <circle class="rec-earring" cx="45" cy="86" r="2.4"/>
+  <circle class="rec-earring" cx="115" cy="86" r="2.4"/>
+</svg>
