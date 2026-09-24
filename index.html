@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}AI Career & Interview Assistant{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="project-eyebrow">
+    <span class="bot bot-gold" aria-hidden="true">{% include "partials/robot.svg" %}</span>
+    AI Career &amp; Interview Assistant &middot; by Harshita Sharma
+  </div>
+  <h1>AI Career &amp; Interview Assistant</h1>
+  <p>Check how well your resume matches a job posting, and generate role-specific interview questions to practice against.</p>
+</header>
+
+<nav class="tabs">
+  <a id="tab-match" class="{{ 'active' if not (questions or q_error) else '' }}" onclick="showPanel('match')">Resume Match</a>
+  <a id="tab-questions" class="{{ 'active' if (questions or q_error) else '' }}" onclick="showPanel('questions')">Interview Prep</a>
+  <a id="tab-mock" onclick="showPanel('mock')">Mock Interview</a>
+</nav>
+
+<section id="panel-match" class="panel {{ 'active' if not (questions or q_error) else '' }}">
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST" action="{{ url_for('career_assistant.analyze') }}">
+    <div class="grid-2">
+      <div>
+        <label for="resume_text">Your resume (paste text)</label>
+        <textarea id="resume_text" name="resume_text" rows="12">{{ resume_text or "" }}</textarea>
+      </div>
+      <div>
+        <label for="jd_text">Job description (paste text)</label>
+        <textarea id="jd_text" name="jd_text" rows="12">{{ jd_text or "" }}</textarea>
+      </div>
+    </div>
+    <button type="submit">Check match</button>
+  </form>
+
+  {% if result %}
+  <div class="result">
+    <div class="score-row">
+      <div class="score-number">{{ result.match_score }}%</div>
+      <div class="verdict">
+        {% if result.match_score >= 75 %}Strong match with this job description.
+        {% elif result.match_score >= 50 %}Moderate match — consider adding a few missing keywords.
+        {% else %}Weak match — this resume likely needs tailoring for this role.
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="kw-block">
+      <h3>Matched keywords ({{ result.matched_keywords|length }})</h3>
+      <div class="kw matched">
+        {% for kw in result.matched_keywords %}<span>{{ kw }}</span>{% endfor %}
+        {% if not result.matched_keywords %}<span style="background:none;color:var(--muted);">none found</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="kw-block">
+      <h3>Missing keywords ({{ result.missing_keywords|length }})</h3>
+      <div class="kw missing">
+        {% for kw in result.missing_keywords %}<span>{{ kw }}</span>{% endfor %}
+        {% if not result.missing_keywords %}<span style="background:none;color:var(--muted);">great coverage</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<section id="panel-questions" class="panel {{ 'active' if (questions or q_error) else '' }}">
+  {% if q_error %}<div class="error">{{ q_error }}</div>{% endif %}
+  <form method="POST" action="{{ url_for('career_assistant.questions') }}">
+    <div class="field-row">
+      <label for="role">Target role</label>
+      <select id="role" name="role">
+        {% for r in roles %}
+        <option value="{{ r }}" {% if selected_role == r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Generate questions</button>
+  </form>
+
+  {% if questions %}
+  <div class="result">
+    <h3 class="sans" style="font-size:0.85rem; color:var(--muted); font-weight:600;">
+      {{ questions|length }} questions for {{ selected_role }}
+    </h3>
+    <ol class="questions">
+      {% for q in questions %}
+      <li><span class="qcat">{{ q.category }}</span>{{ q.question }}</li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+</section>
+
+<section id="panel-mock" class="panel">
+  <div id="mock-setup">
+    <div class="field-row" style="max-width:320px;">
+      <label for="mock-role">Target role</label>
+      <select id="mock-role">
+        {% for r in roles %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row" style="max-width:200px;">
+      <label for="mock-count">Number of questions</label>
+      <select id="mock-count">
+        <option value="3">3</option>
+        <option value="5" selected>5</option>
+        <option value="7">7</option>
+      </select>
+    </div>
+    <div class="field-row" style="max-width:200px;">
+      <label for="mock-gender">AI interviewer</label>
+      <select id="mock-gender">
+        <option value="woman" selected>Woman</option>
+        <option value="man">Man</option>
+      </select>
+    </div>
+    <div id="mock-setup-error" class="error" style="display:none;"></div>
+    <button type="button" onclick="startMockInterview()">Start interview</button>
+    <p class="voice-note">Your AI recruiter will appear on camera and read each question aloud in English - pick a man or woman interviewer above. Make sure your speakers/volume are on. Voice isn't supported in every browser - if it stays silent, you can still read and answer each question as normal. You can also answer out loud using the mic button - it types your speech into the answer box for you.</p>
+  </div>
+
+  <div id="mock-session" style="display:none;">
+    <div class="progress-track"><div class="progress-fill" id="mock-progress" style="width:0%;"></div></div>
+
+    <div class="interviewer-panel">
+      <div class="call-tiles">
+        <div class="interviewer-video" id="mock-avatar">
+          <div class="video-topbar">
+            <span class="video-topbar-left"><span class="live-dot"></span><span class="live-label">LIVE</span></span>
+            <span class="hr-badge">HR</span>
+          </div>
+          <div class="video-face-wrap woman-active" id="mock-face-wrap">
+            <div class="rec-face-slot rec-woman">{% include "partials/recruiter_woman.svg" %}</div>
+            <div class="rec-face-slot rec-man">{% include "partials/recruiter_man.svg" %}</div>
+          </div>
+          <div class="video-bottombar">
+            <span class="hr-name" id="mock-hr-name">Ananya Verma</span>
+            <span class="hr-title" id="mock-hr-title">Senior HR &middot; NimbusTech</span>
+          </div>
+        </div>
+        <div class="candidate-video" id="mock-candidate-tile">
+          <div class="candidate-avatar">&#128100;</div>
+          <div class="mic-level" id="mock-mic-level">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="video-bottombar">You</div>
+        </div>
+      </div>
+      <div class="interviewer-meta">
+        <div class="label" id="mock-progress-label">Question 1 of 5 &middot; <span id="mock-category"></span></div>
+        <div class="qtext" id="mock-question-text"></div>
+      </div>
+      <div class="interviewer-controls">
+        <button type="button" class="secondary" onclick="replayQuestion()">Replay</button>
+      </div>
+    </div>
+
+    <div id="mock-answer-block">
+      <div class="field-row answer-input-row">
+        <label for="mock-answer">Your answer</label>
+        <textarea id="mock-answer" rows="5" placeholder="Type your answer, or tap the mic to speak it..."></textarea>
+        <button type="button" class="mic-btn" id="mock-mic-btn" onclick="toggleMic()" title="Answer with your voice">&#127908;</button>
+      </div>
+      <div class="mic-status" id="mock-mic-status"></div>
+      <button type="button" onclick="submitMockAnswer()">Submit answer</button>
+    </div>
+
+    <div id="mock-reviewing" class="reviewing-indicator" style="display:none;">
+      <div class="reviewing-dots"><span></span><span></span><span></span></div>
+      <span id="mock-reviewing-text">Ananya is reviewing your answer&hellip;</span>
+    </div>
+
+    <div id="mock-result" class="result" style="display:none;">
+      <div class="answer-score"><span id="mock-score-num">0</span><span class="of10">/10</span></div>
+      <ul class="feedback-list" id="mock-feedback"></ul>
+      <button type="button" style="margin-top:14px;" onclick="nextMockQuestion()" id="mock-next-btn">Next question</button>
+    </div>
+  </div>
+
+  <div id="mock-summary" class="summary-box" style="display:none;">
+    <h3>Session complete</h3>
+    <div class="summary-stats">
+      <div><div class="stat-num" id="sum-avg">0</div><div class="stat-label">Average score /10</div></div>
+      <div><div class="stat-num" id="sum-total">0</div><div class="stat-label">Questions answered</div></div>
+      <div><div class="stat-num" id="sum-best">0</div><div class="stat-label">Best answer /10</div></div>
+      <div><div class="stat-num" id="sum-worst">0</div><div class="stat-label">Weakest answer /10</div></div>
+    </div>
+    <button type="button" style="margin-top:18px;" onclick="restartMockInterview()">Start a new session</button>
+  </div>
+</section>
+
+<script>
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('nav.tabs a').forEach(a => a.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // ---------------- Mock Interview: state + speech + API calls ----------------
+  let mockQuestions = [];
+  let mockIndex = 0;
+  let mockResults = [];
+  let mockGender = 'woman';
+
+  const HR_PERSONAS = {
+    woman: { name: 'Ananya Verma', title: 'Senior HR &middot; NimbusTech', greeting: "Hi, I'm Ananya from NimbusTech's HR team. Thanks for making time today - let's get started." },
+    man:   { name: 'Rohan Malhotra', title: 'Lead Technical Recruiter &middot; NimbusTech', greeting: "Hi, I'm Rohan, a recruiter with NimbusTech. Appreciate you being here - let's dive in." },
+  };
+
+  // ---------------- Mic-to-text (candidate answers by speaking) ----------------
+  let recognition = null;
+  let listening = false;
+  let micLevelTimer = null;
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function setupRecognition() {
+    if (!SpeechRecognitionAPI || recognition) return;
+    recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    const answerBox = document.getElementById('mock-answer');
+    let baseText = '';
+
+    recognition.onstart = () => { baseText = answerBox.value ? (answerBox.value.trim() + ' ') : ''; };
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      answerBox.value = (baseText + transcript).trim();
+    };
+    recognition.onerror = () => stopListening('Mic access unavailable - you can still type your answer.');
+    recognition.onend = () => { if (listening) stopListening(); };
+  }
+
+  function startMicLevelAnimation() {
+    const bars = document.querySelectorAll('#mock-mic-level span');
+    document.getElementById('mock-candidate-tile').classList.add('recording');
+    micLevelTimer = setInterval(() => {
+      bars.forEach(b => { b.style.height = (3 + Math.random() * 13) + 'px'; });
+    }, 130);
+  }
+  function stopMicLevelAnimation() {
+    clearInterval(micLevelTimer);
+    document.getElementById('mock-candidate-tile').classList.remove('recording');
+    document.querySelectorAll('#mock-mic-level span').forEach(b => { b.style.height = '3px'; });
+  }
+
+  function toggleMic() {
+    if (!SpeechRecognitionAPI) {
+      document.getElementById('mock-mic-status').textContent =
+        "Voice input isn't supported in this browser - try Chrome, or just type your answer.";
+      return;
+    }
+    setupRecognition();
+    if (listening) {
+      stopListening();
+    } else {
+      try {
+        window.speechSynthesis.cancel();
+        recognition.start();
+        listening = true;
+        document.getElementById('mock-mic-btn').classList.add('listening');
+        document.getElementById('mock-mic-status').textContent = 'Listening... tap the mic again to stop.';
+        startMicLevelAnimation();
+      } catch (e) {
+        stopListening("Couldn't start the mic - you can still type your answer.");
+      }
+    }
+  }
+
+  function stopListening(message) {
+    listening = false;
+    if (recognition) { try { recognition.stop(); } catch (e) {} }
+    document.getElementById('mock-mic-btn').classList.remove('listening');
+    document.getElementById('mock-mic-status').textContent = message || '';
+    stopMicLevelAnimation();
+  }
+
+  function speak(text) {
+    const avatar = document.getElementById('mock-avatar');
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US';
+    utter.rate = 0.98;
+    const voices = window.speechSynthesis.getVoices();
+    // Prefer a voice that matches the chosen interviewer's gender when the
+    // browser exposes that info; falls back to the first English voice.
+    const wantFemale = mockGender !== 'man';
+    const enVoices = voices.filter(v => v.lang && v.lang.startsWith('en'));
+    const genderMatch = enVoices.find(v => {
+      const n = v.name.toLowerCase();
+      return wantFemale
+        ? /female|woman|samantha|victoria|zira|susan|karen/.test(n)
+        : /male|man|daniel|david|alex|fred|george/.test(n);
+    });
+    utter.voice = genderMatch || enVoices[0];
+    utter.onstart = () => avatar.classList.add('speaking');
+    utter.onend = () => avatar.classList.remove('speaking');
+    utter.onerror = () => avatar.classList.remove('speaking');
+    window.speechSynthesis.speak(utter);
+  }
+
+  function replayQuestion() {
+    const q = mockQuestions[mockIndex];
+    if (q) speak(q.question);
+  }
+
+  async function startMockInterview() {
+    const role = document.getElementById('mock-role').value;
+    const numQuestions = parseInt(document.getElementById('mock-count').value, 10);
+    mockGender = document.getElementById('mock-gender').value;
+    const faceWrap = document.getElementById('mock-face-wrap');
+    faceWrap.classList.toggle('woman-active', mockGender !== 'man');
+    faceWrap.classList.toggle('man-active', mockGender === 'man');
+    const persona = HR_PERSONAS[mockGender] || HR_PERSONAS.woman;
+    document.getElementById('mock-hr-name').textContent = persona.name;
+    document.getElementById('mock-hr-title').innerHTML = persona.title;
+    document.getElementById('mock-reviewing-text').textContent = persona.name.split(' ')[0] + ' is reviewing your answer\u2026';
+    const errBox = document.getElementById('mock-setup-error');
+    errBox.style.display = 'none';
+
+    try {
+      const res = await fetch("{{ url_for('career_assistant.api_start_mock_interview') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: role, num_questions: numQuestions }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errBox.textContent = data.error || 'Something went wrong starting the interview.';
+        errBox.style.display = 'block';
+        return;
+      }
+      mockQuestions = data.questions;
+      mockIndex = 0;
+      mockResults = [];
+
+      document.getElementById('mock-setup').style.display = 'none';
+      document.getElementById('mock-summary').style.display = 'none';
+      document.getElementById('mock-session').style.display = 'block';
+      showQuestion(true);
+    } catch (e) {
+      errBox.textContent = 'Could not reach the server. Please try again.';
+      errBox.style.display = 'block';
+    }
+  }
+
+  function showQuestion(isFirst) {
+    if (listening) stopListening();
+    const q = mockQuestions[mockIndex];
+    document.getElementById('mock-progress-label').innerHTML =
+      'Question ' + (mockIndex + 1) + ' of ' + mockQuestions.length + ' &middot; <span id="mock-category">' + q.category + '</span>';
+    document.getElementById('mock-question-text').textContent = q.question;
+    document.getElementById('mock-progress').style.width = Math.round((mockIndex / mockQuestions.length) * 100) + '%';
+    document.getElementById('mock-answer').value = '';
+    document.getElementById('mock-mic-status').textContent = '';
+    document.getElementById('mock-answer-block').style.display = 'block';
+    document.getElementById('mock-reviewing').style.display = 'none';
+    document.getElementById('mock-result').style.display = 'none';
+
+    if (isFirst) {
+      const persona = HR_PERSONAS[mockGender] || HR_PERSONAS.woman;
+      speak(persona.greeting + ' ' + q.question);
+    } else {
+      speak(q.question);
+    }
+  }
+
+  async function submitMockAnswer() {
+    if (listening) stopListening();
+    const answer = document.getElementById('mock-answer').value;
+    const q = mockQuestions[mockIndex];
+
+    document.getElementById('mock-answer-block').style.display = 'none';
+    document.getElementById('mock-reviewing').style.display = 'flex';
+
+    const [res] = await Promise.all([
+      fetch("{{ url_for('career_assistant.api_score_mock_answer') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, answer: answer }),
+      }),
+      new Promise(resolve => setTimeout(resolve, 700)), // brief "reviewing" pause for a human feel
+    ]);
+    const outcome = await res.json();
+    mockResults.push(outcome);
+
+    document.getElementById('mock-score-num').textContent = outcome.score;
+    const list = document.getElementById('mock-feedback');
+    list.innerHTML = '';
+    (outcome.feedback || []).forEach(line => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      list.appendChild(li);
+    });
+
+    document.getElementById('mock-reviewing').style.display = 'none';
+    document.getElementById('mock-result').style.display = 'block';
+    document.getElementById('mock-next-btn').textContent =
+      (mockIndex === mockQuestions.length - 1) ? 'See summary' : 'Next question';
+  }
+
+  async function nextMockQuestion() {
+    mockIndex += 1;
+    if (mockIndex >= mockQuestions.length) {
+      document.getElementById('mock-progress').style.width = '100%';
+      document.getElementById('mock-session').style.display = 'none';
+
+      const res = await fetch("{{ url_for('career_assistant.api_summarize_mock_interview') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ results: mockResults }),
+      });
+      const summary = await res.json();
+      document.getElementById('sum-avg').textContent = summary.average_score;
+      document.getElementById('sum-total').textContent = summary.total_questions;
+      document.getElementById('sum-best').textContent = summary.strongest_score;
+      document.getElementById('sum-worst').textContent = summary.weakest_score;
+      document.getElementById('mock-summary').style.display = 'block';
+      return;
+    }
+    showQuestion();
+  }
+
+  function restartMockInterview() {
+    document.getElementById('mock-summary').style.display = 'none';
+    document.getElementById('mock-setup').style.display = 'block';
+  }
+
+  // Some browsers load voices asynchronously - prime the list early.
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  }
+</script>
+{% endblock %}
